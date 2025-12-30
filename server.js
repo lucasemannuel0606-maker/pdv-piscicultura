@@ -1,140 +1,207 @@
 const express = require("express");
-const sqlite3 = require("sqlite3").verbose();
+const Database = require("better-sqlite3");
+const path = require("path");
+
 const app = express();
+const db = new Database("pdv.db");
 
 app.use(express.json());
-app.use(express.static("public"));
+app.use(express.static(path.join(__dirname, "public")));
 
-const db = new sqlite3.Database("pdv.db");
+/* =====================
+   🔐 TABELAS
+===================== */
 
-// ===== BANCO =====
-db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS usuarios (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user TEXT UNIQUE,
-    senha TEXT,
-    perfil TEXT
-  )`);
+db.prepare(`
+CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT UNIQUE,
+  password TEXT,
+  role TEXT CHECK(role IN ('admin','vendedor'))
+)
+`).run();
 
-  db.run(`INSERT OR IGNORE INTO usuarios (user, senha, perfil)
-          VALUES ('admin','admin','admin')`);
+db.prepare(`
+CREATE TABLE IF NOT EXISTS clientes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  nome TEXT,
+  telefone TEXT,
+  cidade TEXT
+)
+`).run();
 
-  db.run(`CREATE TABLE IF NOT EXISTS clientes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome TEXT,
-    fone TEXT
-  )`);
+db.prepare(`
+CREATE TABLE IF NOT EXISTS produtos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  nome TEXT,
+  categoria TEXT,
+  preco REAL
+)
+`).run();
 
-  db.run(`CREATE TABLE IF NOT EXISTS produtos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome TEXT,
-    preco REAL
-  )`);
+db.prepare(`
+CREATE TABLE IF NOT EXISTS vendas (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  cliente_id INTEGER,
+  usuario_id INTEGER,
+  subtotal REAL,
+  frete REAL,
+  brinde TEXT,
+  total REAL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+`).run();
 
-  db.run(`CREATE TABLE IF NOT EXISTS vendas (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    cliente TEXT,
-    produto TEXT,
-    total REAL,
-    frete REAL,
-    brinde TEXT,
-    vendedor TEXT,
-    data TEXT
-  )`);
+db.prepare(`
+CREATE TABLE IF NOT EXISTS venda_itens (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  venda_id INTEGER,
+  produto_id INTEGER,
+  quantidade REAL,
+  preco_unitario REAL,
+  total REAL
+)
+`).run();
+
+/* =====================
+   👤 USUÁRIO ADMIN PADRÃO
+===================== */
+
+const adminExists = db
+  .prepare("SELECT * FROM users WHERE username = 'admin'")
+  .get();
+
+if (!adminExists) {
+  db.prepare(
+    "INSERT INTO users (username, password, role) VALUES (?, ?, ?)"
+  ).run("admin", "1234", "admin");
+}
+
+/* =====================
+   🔐 LOGIN
+===================== */
+
+app.post("/api/login", (req, res) => {
+  const { username, password } = req.body;
+
+  const user = db
+    .prepare("SELECT id, username, role FROM users WHERE username = ? AND password = ?")
+    .get(username, password);
+
+  if (!user) return res.status(401).json({ error: "Login inválido" });
+
+  res.json(user);
 });
 
-// ===== LOGIN =====
-app.post("/login", (req, res) => {
-  const { user, senha } = req.body;
-  db.get(
-    "SELECT perfil FROM usuarios WHERE user=? AND senha=?",
-    [user, senha],
-    (_, row) => {
-      if (!row) return res.status(401).json({ ok: false });
-      res.json({ ok: true, perfil: row.perfil, user });
-    }
-  );
+/* =====================
+   👥 USUÁRIOS
+===================== */
+
+app.post("/api/users", (req, res) => {
+  const { username, password, role } = req.body;
+  db.prepare(
+    "INSERT INTO users (username, password, role) VALUES (?, ?, ?)"
+  ).run(username, password, role);
+  res.json({ success: true });
 });
 
-// ===== TROCAR SENHA =====
-app.post("/trocar-senha", (req, res) => {
-  const { user, senhaAtual, novaSenha } = req.body;
-  db.get(
-    "SELECT * FROM usuarios WHERE user=? AND senha=?",
-    [user, senhaAtual],
-    (_, row) => {
-      if (!row) return res.status(401).json({ erro: true });
-      db.run(
-        "UPDATE usuarios SET senha=? WHERE user=?",
-        [novaSenha, user],
-        () => res.json({ ok: true })
+app.get("/api/users", (req, res) => {
+  res.json(db.prepare("SELECT id, username, role FROM users").all());
+});
+
+/* =====================
+   🧑 CLIENTES
+===================== */
+
+app.post("/api/clientes", (req, res) => {
+  const { nome, telefone, cidade } = req.body;
+  db.prepare(
+    "INSERT INTO clientes (nome, telefone, cidade) VALUES (?, ?, ?)"
+  ).run(nome, telefone, cidade);
+  res.json({ success: true });
+});
+
+app.get("/api/clientes", (req, res) => {
+  res.json(db.prepare("SELECT * FROM clientes").all());
+});
+
+/* =====================
+   🐟 PRODUTOS
+===================== */
+
+app.post("/api/produtos", (req, res) => {
+  const { nome, categoria, preco } = req.body;
+  db.prepare(
+    "INSERT INTO produtos (nome, categoria, preco) VALUES (?, ?, ?)"
+  ).run(nome, categoria, preco);
+  res.json({ success: true });
+});
+
+app.get("/api/produtos", (req, res) => {
+  res.json(db.prepare("SELECT * FROM produtos").all());
+});
+
+/* =====================
+   🧾 FINALIZAR VENDA (OTIMIZADO)
+===================== */
+
+app.post("/api/vendas", (req, res) => {
+  const { cliente_id, usuario_id, itens, frete, brinde } = req.body;
+
+  let subtotal = 0;
+  itens.forEach(i => subtotal += i.preco * i.quantidade);
+
+  const total = subtotal + (frete || 0);
+
+  const venda = db.prepare(`
+    INSERT INTO vendas (cliente_id, usuario_id, subtotal, frete, brinde, total)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(cliente_id, usuario_id, subtotal, frete || 0, brinde || "", total);
+
+  const insertItem = db.prepare(`
+    INSERT INTO venda_itens (venda_id, produto_id, quantidade, preco_unitario, total)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+
+  const transaction = db.transaction(() => {
+    itens.forEach(i => {
+      insertItem.run(
+        venda.lastInsertRowid,
+        i.produto_id,
+        i.quantidade,
+        i.preco,
+        i.preco * i.quantidade
       );
-    }
-  );
+    });
+  });
+
+  transaction();
+
+  res.json({ success: true, venda_id: venda.lastInsertRowid });
 });
 
-// ===== CRUD SIMPLES =====
-const listar = (tabela, res) =>
-  db.all(`SELECT * FROM ${tabela}`, (_, r) => res.json(r));
+/* =====================
+   📊 RELATÓRIO DE VENDAS
+===================== */
 
-app.get("/clientes", (_, res) => listar("clientes", res));
-app.get("/produtos", (_, res) => listar("produtos", res));
-app.get("/vendas", (_, res) =>
-  db.all("SELECT * FROM vendas ORDER BY id DESC", (_, r) => res.json(r))
-);
+app.get("/api/relatorio", (req, res) => {
+  const vendas = db.prepare(`
+    SELECT v.id, c.nome AS cliente, u.username AS vendedor,
+           v.subtotal, v.frete, v.brinde, v.total, v.created_at
+    FROM vendas v
+    LEFT JOIN clientes c ON c.id = v.cliente_id
+    LEFT JOIN users u ON u.id = v.usuario_id
+    ORDER BY v.created_at DESC
+  `).all();
 
-app.post("/clientes", (req, res) => {
-  db.run("INSERT INTO clientes VALUES (NULL,?,?)",
-    [req.body.nome, req.body.fone],
-    () => res.sendStatus(200)
-  );
+  res.json(vendas);
 });
 
-app.post("/produtos", (req, res) => {
-  db.run("INSERT INTO produtos VALUES (NULL,?,?)",
-    [req.body.nome, req.body.preco],
-    () => res.sendStatus(200)
-  );
-});
-
-app.post("/vendas", (req, res) => {
-  const { cliente, produto, total, frete, brinde, vendedor } = req.body;
-  db.run(
-    "INSERT INTO vendas VALUES (NULL,?,?,?,?,?,?)",
-    [cliente, produto, total, frete, brinde, vendedor, new Date().toLocaleString()],
-    () => res.sendStatus(200)
-  );
-});
-
-["clientes","produtos","vendas"].forEach(t =>
-  app.delete(`/${t}/:id`, (req, res) => {
-    db.run(`DELETE FROM ${t} WHERE id=?`, [req.params.id]);
-    res.sendStatus(200);
-  })
-);
-
-// ===== USUÁRIOS =====
-app.get("/usuarios", (_, res) =>
-  db.all("SELECT id,user,perfil FROM usuarios", (_, r) => res.json(r))
-);
-
-app.post("/usuarios", (req, res) => {
-  const { user, senha, perfil } = req.body;
-  db.run(
-    "INSERT INTO usuarios (user,senha,perfil) VALUES (?,?,?)",
-    [user, senha, perfil],
-    err => err ? res.sendStatus(400) : res.sendStatus(200)
-  );
-});
-
-app.delete("/usuarios/:id", (req, res) => {
-  db.run("DELETE FROM usuarios WHERE id=? AND user!='admin'", [req.params.id]);
-  res.sendStatus(200);
-});
+/* =====================
+   🚀 SERVER
+===================== */
 
 const PORT = process.env.PORT || 3000;
-
 app.listen(PORT, "0.0.0.0", () => {
   console.log("✅ PDV rodando na porta", PORT);
 });
-

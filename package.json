@@ -1,13 +1,11 @@
 {
-    "name": "pdv-piscicultura",
-    "version": "1.0.0",
-    "main": "server.js",
-    "scripts": {
-      "start": "node server.js"
-    },
-    "dependencies": {
-      "express": "^4.18.2",
-      "sqlite3": "^5.1.6"
-    }
+  "name": "pdv-piscicultura",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "better-sqlite3": "^9.4.0"
   }
-  
+}
