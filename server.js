@@ -8,16 +8,14 @@ const db = new Database("pdv.db");
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-/* =====================
-   🗄️ TABELAS
-===================== */
+/* ================== TABELAS ================== */
 
 db.prepare(`
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT UNIQUE,
   password TEXT,
-  role TEXT CHECK(role IN ('admin','vendedor'))
+  role TEXT
 )
 `).run();
 
@@ -25,8 +23,7 @@ db.prepare(`
 CREATE TABLE IF NOT EXISTS clientes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   nome TEXT,
-  telefone TEXT,
-  cidade TEXT
+  telefone TEXT
 )
 `).run();
 
@@ -34,7 +31,6 @@ db.prepare(`
 CREATE TABLE IF NOT EXISTS produtos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   nome TEXT,
-  categoria TEXT,
   preco REAL
 )
 `).run();
@@ -48,7 +44,7 @@ CREATE TABLE IF NOT EXISTS vendas (
   frete REAL,
   brinde TEXT,
   total REAL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  data DATETIME DEFAULT CURRENT_TIMESTAMP
 )
 `).run();
 
@@ -58,34 +54,29 @@ CREATE TABLE IF NOT EXISTS venda_itens (
   venda_id INTEGER,
   produto_id INTEGER,
   quantidade REAL,
-  preco_unitario REAL,
-  total REAL
+  preco REAL
 )
 `).run();
 
-/* =====================
-   👤 ADMIN PADRÃO
-===================== */
+/* ================== ADMIN PADRÃO ================== */
 
 const admin = db.prepare(
-  "SELECT * FROM users WHERE username = 'admin'"
+  "SELECT * FROM users WHERE username='admin'"
 ).get();
 
 if (!admin) {
   db.prepare(
-    "INSERT INTO users (username, password, role) VALUES (?, ?, ?)"
+    "INSERT INTO users (username,password,role) VALUES (?,?,?)"
   ).run("admin", "1234", "admin");
 }
 
-/* =====================
-   🔐 LOGIN
-===================== */
+/* ================== LOGIN ================== */
 
 app.post("/api/login", (req, res) => {
   const { username, password } = req.body;
 
   const user = db.prepare(
-    "SELECT id, username, role FROM users WHERE username = ? AND password = ?"
+    "SELECT id, username, role FROM users WHERE username=? AND password=?"
   ).get(username, password);
 
   if (!user) {
@@ -95,15 +86,13 @@ app.post("/api/login", (req, res) => {
   res.json(user);
 });
 
-/* =====================
-   🔑 TROCAR SENHA
-===================== */
+/* ================== TROCAR SENHA ================== */
 
 app.post("/api/trocar-senha", (req, res) => {
   const { user_id, senha_atual, nova_senha } = req.body;
 
   const user = db.prepare(
-    "SELECT * FROM users WHERE id = ? AND password = ?"
+    "SELECT * FROM users WHERE id=? AND password=?"
   ).get(user_id, senha_atual);
 
   if (!user) {
@@ -111,69 +100,41 @@ app.post("/api/trocar-senha", (req, res) => {
   }
 
   db.prepare(
-    "UPDATE users SET password = ? WHERE id = ?"
+    "UPDATE users SET password=? WHERE id=?"
   ).run(nova_senha, user_id);
 
   res.json({ success: true });
 });
 
-/* =====================
-   👥 USUÁRIOS (ADMIN)
-===================== */
-
-app.post("/api/users", (req, res) => {
-  const { username, password, role } = req.body;
-  db.prepare(
-    "INSERT INTO users (username, password, role) VALUES (?, ?, ?)"
-  ).run(username, password, role);
-  res.json({ success: true });
-});
-
-app.get("/api/users", (req, res) => {
-  res.json(
-    db.prepare("SELECT id, username, role FROM users").all()
-  );
-});
-
-/* =====================
-   🧑 CLIENTES
-===================== */
-
-app.post("/api/clientes", (req, res) => {
-  const { nome, telefone, cidade } = req.body;
-  db.prepare(
-    "INSERT INTO clientes (nome, telefone, cidade) VALUES (?, ?, ?)"
-  ).run(nome, telefone, cidade);
-  res.json({ success: true });
-});
+/* ================== CLIENTES ================== */
 
 app.get("/api/clientes", (req, res) => {
-  res.json(
-    db.prepare("SELECT * FROM clientes").all()
-  );
+  res.json(db.prepare("SELECT * FROM clientes").all());
 });
 
-/* =====================
-   🐟 PRODUTOS
-===================== */
-
-app.post("/api/produtos", (req, res) => {
-  const { nome, categoria, preco } = req.body;
+app.post("/api/clientes", (req, res) => {
+  const { nome, telefone } = req.body;
   db.prepare(
-    "INSERT INTO produtos (nome, categoria, preco) VALUES (?, ?, ?)"
-  ).run(nome, categoria, preco);
+    "INSERT INTO clientes (nome,telefone) VALUES (?,?)"
+  ).run(nome, telefone);
   res.json({ success: true });
 });
 
+/* ================== PRODUTOS ================== */
+
 app.get("/api/produtos", (req, res) => {
-  res.json(
-    db.prepare("SELECT * FROM produtos").all()
-  );
+  res.json(db.prepare("SELECT * FROM produtos").all());
 });
 
-/* =====================
-   🧾 FINALIZAR VENDA
-===================== */
+app.post("/api/produtos", (req, res) => {
+  const { nome, preco } = req.body;
+  db.prepare(
+    "INSERT INTO produtos (nome,preco) VALUES (?,?)"
+  ).run(nome, preco);
+  res.json({ success: true });
+});
+
+/* ================== FINALIZAR VENDA ================== */
 
 app.post("/api/vendas", (req, res) => {
   const { cliente_id, usuario_id, itens, frete, brinde } = req.body;
@@ -186,54 +147,33 @@ app.post("/api/vendas", (req, res) => {
   const venda = db.prepare(`
     INSERT INTO vendas
     (cliente_id, usuario_id, subtotal, frete, brinde, total)
-    VALUES (?, ?, ?, ?, ?, ?)
+    VALUES (?,?,?,?,?,?)
   `).run(cliente_id, usuario_id, subtotal, frete || 0, brinde || "", total);
 
-  const insertItem = db.prepare(`
+  const stmt = db.prepare(`
     INSERT INTO venda_itens
-    (venda_id, produto_id, quantidade, preco_unitario, total)
-    VALUES (?, ?, ?, ?, ?)
+    (venda_id, produto_id, quantidade, preco)
+    VALUES (?,?,?,?)
   `);
 
   const trx = db.transaction(() => {
     itens.forEach(i => {
-      insertItem.run(
+      stmt.run(
         venda.lastInsertRowid,
         i.produto_id,
         i.quantidade,
-        i.preco,
-        i.preco * i.quantidade
+        i.preco
       );
     });
   });
 
   trx();
-
   res.json({ success: true });
 });
 
-/* =====================
-   📊 RELATÓRIO
-===================== */
-
-app.get("/api/relatorio", (req, res) => {
-  res.json(
-    db.prepare(`
-      SELECT v.id, c.nome cliente, u.username vendedor,
-             v.subtotal, v.frete, v.brinde, v.total, v.created_at
-      FROM vendas v
-      LEFT JOIN clientes c ON c.id = v.cliente_id
-      LEFT JOIN users u ON u.id = v.usuario_id
-      ORDER BY v.created_at DESC
-    `).all()
-  );
-});
-
-/* =====================
-   🚀 SERVER
-===================== */
+/* ================== SERVER ================== */
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, "0.0.0.0", () => {
-  console.log("✅ PDV rodando na porta", PORT);
-});
+app.listen(PORT, "0.0.0.0", () =>
+  console.log("✅ PDV rodando na porta", PORT)
+);

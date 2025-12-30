@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-br">
 <head>
 <meta charset="UTF-8">
 <title>PDV Piscicultura</title>
@@ -9,65 +9,26 @@
 
 <div id="login">
   <h2>Login</h2>
-  <input id="user" placeholder="Usuário">
-  <input id="senha" type="password" placeholder="Senha">
-  <button onclick="fazerLogin()">Entrar</button>
+  <input id="username" placeholder="Usuário">
+  <input id="password" type="password" placeholder="Senha">
+  <button onclick="login()">Entrar</button>
 </div>
 
 <div id="pdv" style="display:none">
-<h2>PDV Piscicultura</h2>
+  <h2>PDV Piscicultura</h2>
 
-<div id="loading" class="loading">Processando...</div>
+  <select id="cliente"></select>
+  <select id="produto"></select>
+  <input id="quantidade" type="number" value="1">
+  <button onclick="addItem()">Adicionar</button>
 
-<section>
-<h3>Clientes</h3>
-<input id="cNome" placeholder="Nome">
-<input id="cFone" placeholder="Telefone">
-<button onclick="acao(addCliente,this)">Adicionar</button>
-<ul id="listaClientes"></ul>
-</section>
+  <ul id="lista"></ul>
 
-<section>
-<h3>Produtos</h3>
-<input id="pNome" placeholder="Produto">
-<input id="pPreco" placeholder="Preço">
-<button onclick="acao(addProduto,this)">Adicionar</button>
-<ul id="listaProdutos"></ul>
-</section>
+  <input id="frete" placeholder="Frete" type="number">
+  <input id="brinde" placeholder="Brinde">
 
-<section>
-<h3>Venda</h3>
-<select id="vCliente"></select>
-<select id="vProduto"></select>
-<input id="vFrete" placeholder="Frete" value="0">
-<input id="vBrinde" placeholder="Brinde">
-<button onclick="acao(vender,this)">Finalizar venda</button>
-</section>
-
-<section>
-<h3>Trocar senha</h3>
-<input id="senhaAtual" type="password" placeholder="Senha atual">
-<input id="novaSenhaTroca" type="password" placeholder="Nova senha">
-<button onclick="acao(trocarSenha,this)">Atualizar</button>
-</section>
-
-<section>
-<h3>Vendas</h3>
-<ul id="listaVendas"></ul>
-</section>
-
-<section id="boxUsuarios" style="display:none">
-<h3>Usuários</h3>
-<input id="novoUser" placeholder="Usuário">
-<input id="novaSenha" placeholder="Senha">
-<select id="novoPerfil">
-<option value="vendedor">Vendedor</option>
-<option value="admin">Admin</option>
-</select>
-<button onclick="acao(addUsuario,this)">Criar usuário</button>
-<ul id="listaUsuarios"></ul>
-</section>
-
+  <button onclick="finalizarVenda()">Finalizar Venda</button>
+  <a href="trocar-senha.html">Trocar senha</a>
 </div>
 
 <script src="script.js"></script>
