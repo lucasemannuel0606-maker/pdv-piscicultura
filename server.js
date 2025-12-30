@@ -9,7 +9,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 /* =====================
-   🔐 TABELAS
+   🗄️ TABELAS
 ===================== */
 
 db.prepare(`
@@ -64,14 +64,14 @@ CREATE TABLE IF NOT EXISTS venda_itens (
 `).run();
 
 /* =====================
-   👤 USUÁRIO ADMIN PADRÃO
+   👤 ADMIN PADRÃO
 ===================== */
 
-const adminExists = db
-  .prepare("SELECT * FROM users WHERE username = 'admin'")
-  .get();
+const admin = db.prepare(
+  "SELECT * FROM users WHERE username = 'admin'"
+).get();
 
-if (!adminExists) {
+if (!admin) {
   db.prepare(
     "INSERT INTO users (username, password, role) VALUES (?, ?, ?)"
   ).run("admin", "1234", "admin");
@@ -84,17 +84,41 @@ if (!adminExists) {
 app.post("/api/login", (req, res) => {
   const { username, password } = req.body;
 
-  const user = db
-    .prepare("SELECT id, username, role FROM users WHERE username = ? AND password = ?")
-    .get(username, password);
+  const user = db.prepare(
+    "SELECT id, username, role FROM users WHERE username = ? AND password = ?"
+  ).get(username, password);
 
-  if (!user) return res.status(401).json({ error: "Login inválido" });
+  if (!user) {
+    return res.status(401).json({ error: "Login inválido" });
+  }
 
   res.json(user);
 });
 
 /* =====================
-   👥 USUÁRIOS
+   🔑 TROCAR SENHA
+===================== */
+
+app.post("/api/trocar-senha", (req, res) => {
+  const { user_id, senha_atual, nova_senha } = req.body;
+
+  const user = db.prepare(
+    "SELECT * FROM users WHERE id = ? AND password = ?"
+  ).get(user_id, senha_atual);
+
+  if (!user) {
+    return res.status(400).json({ error: "Senha atual incorreta" });
+  }
+
+  db.prepare(
+    "UPDATE users SET password = ? WHERE id = ?"
+  ).run(nova_senha, user_id);
+
+  res.json({ success: true });
+});
+
+/* =====================
+   👥 USUÁRIOS (ADMIN)
 ===================== */
 
 app.post("/api/users", (req, res) => {
@@ -106,7 +130,9 @@ app.post("/api/users", (req, res) => {
 });
 
 app.get("/api/users", (req, res) => {
-  res.json(db.prepare("SELECT id, username, role FROM users").all());
+  res.json(
+    db.prepare("SELECT id, username, role FROM users").all()
+  );
 });
 
 /* =====================
@@ -122,7 +148,9 @@ app.post("/api/clientes", (req, res) => {
 });
 
 app.get("/api/clientes", (req, res) => {
-  res.json(db.prepare("SELECT * FROM clientes").all());
+  res.json(
+    db.prepare("SELECT * FROM clientes").all()
+  );
 });
 
 /* =====================
@@ -138,11 +166,13 @@ app.post("/api/produtos", (req, res) => {
 });
 
 app.get("/api/produtos", (req, res) => {
-  res.json(db.prepare("SELECT * FROM produtos").all());
+  res.json(
+    db.prepare("SELECT * FROM produtos").all()
+  );
 });
 
 /* =====================
-   🧾 FINALIZAR VENDA (OTIMIZADO)
+   🧾 FINALIZAR VENDA
 ===================== */
 
 app.post("/api/vendas", (req, res) => {
@@ -154,16 +184,18 @@ app.post("/api/vendas", (req, res) => {
   const total = subtotal + (frete || 0);
 
   const venda = db.prepare(`
-    INSERT INTO vendas (cliente_id, usuario_id, subtotal, frete, brinde, total)
+    INSERT INTO vendas
+    (cliente_id, usuario_id, subtotal, frete, brinde, total)
     VALUES (?, ?, ?, ?, ?, ?)
   `).run(cliente_id, usuario_id, subtotal, frete || 0, brinde || "", total);
 
   const insertItem = db.prepare(`
-    INSERT INTO venda_itens (venda_id, produto_id, quantidade, preco_unitario, total)
+    INSERT INTO venda_itens
+    (venda_id, produto_id, quantidade, preco_unitario, total)
     VALUES (?, ?, ?, ?, ?)
   `);
 
-  const transaction = db.transaction(() => {
+  const trx = db.transaction(() => {
     itens.forEach(i => {
       insertItem.run(
         venda.lastInsertRowid,
@@ -175,26 +207,26 @@ app.post("/api/vendas", (req, res) => {
     });
   });
 
-  transaction();
+  trx();
 
-  res.json({ success: true, venda_id: venda.lastInsertRowid });
+  res.json({ success: true });
 });
 
 /* =====================
-   📊 RELATÓRIO DE VENDAS
+   📊 RELATÓRIO
 ===================== */
 
 app.get("/api/relatorio", (req, res) => {
-  const vendas = db.prepare(`
-    SELECT v.id, c.nome AS cliente, u.username AS vendedor,
-           v.subtotal, v.frete, v.brinde, v.total, v.created_at
-    FROM vendas v
-    LEFT JOIN clientes c ON c.id = v.cliente_id
-    LEFT JOIN users u ON u.id = v.usuario_id
-    ORDER BY v.created_at DESC
-  `).all();
-
-  res.json(vendas);
+  res.json(
+    db.prepare(`
+      SELECT v.id, c.nome cliente, u.username vendedor,
+             v.subtotal, v.frete, v.brinde, v.total, v.created_at
+      FROM vendas v
+      LEFT JOIN clientes c ON c.id = v.cliente_id
+      LEFT JOIN users u ON u.id = v.usuario_id
+      ORDER BY v.created_at DESC
+    `).all()
+  );
 });
 
 /* =====================
