@@ -79,9 +79,7 @@ app.post("/api/login", (req, res) => {
     "SELECT id, username, role FROM users WHERE username=? AND password=?"
   ).get(username, password);
 
-  if (!user) {
-    return res.status(401).json({ error: "Login inválido" });
-  }
+  if (!user) return res.status(401).json({ error: "Login inválido" });
 
   res.json(user);
 });
@@ -95,9 +93,7 @@ app.post("/api/trocar-senha", (req, res) => {
     "SELECT * FROM users WHERE id=? AND password=?"
   ).get(user_id, senha_atual);
 
-  if (!user) {
-    return res.status(400).json({ error: "Senha atual incorreta" });
-  }
+  if (!user) return res.status(400).json({ error: "Senha atual incorreta" });
 
   db.prepare(
     "UPDATE users SET password=? WHERE id=?"

@@ -1,76 +1,33 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>Trocar Senha</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f0f4f8;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-    }
-    .box {
-      background: #fff;
-      padding: 25px;
-      border-radius: 8px;
-      width: 300px;
-      box-shadow: 0 0 10px rgba(0,0,0,.1);
-    }
-    input, button {
-      width: 100%;
-      padding: 10px;
-      margin-top: 10px;
-    }
-    button {
-      background: #0b5ed7;
-      color: #fff;
-      border: none;
-      cursor: pointer;
-    }
-  </style>
+<meta charset="UTF-8">
+<title>Trocar Senha</title>
 </head>
 <body>
 
-<div class="box">
-  <h3>Trocar senha</h3>
-
-  <input type="password" id="senhaAtual" placeholder="Senha atual">
-  <input type="password" id="novaSenha" placeholder="Nova senha">
-
-  <button onclick="trocarSenha()">Salvar</button>
-</div>
+<h2>Trocar Senha</h2>
+<input id="atual" type="password" placeholder="Senha atual">
+<input id="nova" type="password" placeholder="Nova senha">
+<button onclick="trocar()">Salvar</button>
 
 <script>
-  const user = JSON.parse(localStorage.getItem("user"));
+const user = JSON.parse(localStorage.getItem("user"));
 
-  if (!user) {
-    alert("Faça login novamente");
-    location.href = "/";
-  }
-
-  function trocarSenha() {
-    fetch("/api/trocar-senha", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_id: user.id,
-        senha_atual: senhaAtual.value,
-        nova_senha: novaSenha.value
-      })
+function trocar() {
+  fetch("/api/trocar-senha",{
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({
+      user_id: user.id,
+      senha_atual: atual.value,
+      nova_senha: nova.value
     })
-    .then(r => r.json())
-    .then(d => {
-      if (d.error) {
-        alert(d.error);
-      } else {
-        alert("Senha alterada com sucesso!");
-        location.href = "/";
-      }
-    });
-  }
+  }).then(r=>r.json()).then(d=>{
+    if(d.error) alert(d.error);
+    else alert("Senha alterada");
+  });
+}
 </script>
 
 </body>
